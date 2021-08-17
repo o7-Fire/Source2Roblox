@@ -35,8 +35,12 @@ jobs:
         run: |
           New-Item -Path .\.sonar\scanner -ItemType Directory
           dotnet tool update dotnet-sonarscanner --tool-path .\.sonar\scanner
+          
+      - name: Roblox-File-Format
+        run: git clone https://github.com/CloneTrooper1019/Roblox-File-Format.git ../Roblox-File-Format
+        
       - name: ValveKeyValue
-        run: git clone https://github.com/SteamDatabase/ValveKeyValue ../ValveKeyValue
+        run: git clone https://github.com/SteamDatabase/ValveKeyValue.git ../ValveKeyValue
       - name: Build and analyze
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
@@ -45,6 +49,7 @@ jobs:
           .\.sonar\scanner\dotnet-sonarscanner begin /k:"o7-Fire_Source2Roblox" /d:sonar.login="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}"
           dotnet build
           dotnet publish
+          dir ../
           dir
           dir build
           .\.sonar\scanner\dotnet-sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
