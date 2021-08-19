@@ -39,7 +39,13 @@ jobs:
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: 5.0.x
-        
+    - name: Nugget
+      shell: powershell
+      run: |
+      nuget restore Source2Roblox.sln
+      nuget restore ../ValveKeyValue/ValveKeyValue/ValveKeyValue.sln
+      nuget restore ../Roblox-File-Format/RobloxFileFormat.sln
+      
     # Add  MSBuild to the PATH: https://github.com/microsoft/setup-msbuild
     - name: Setup MSBuild.exe
       uses: microsoft/setup-msbuild@v1.0.2
@@ -49,7 +55,6 @@ jobs:
       run: msbuild $env:Solution_Name /t:Restore /p:Configuration=$env:Configuration
       env:
         Configuration: ${{ matrix.configuration }}
-
 
 
     # Create the app package by building and packaging the Windows Application Packaging project
