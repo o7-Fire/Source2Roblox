@@ -15,13 +15,12 @@ jobs:
         run: git clone https://github.com/CloneTrooper1019/Roblox-File-Format.git ../Roblox-File-Format
         
       - name: ValveKeyValue
-        run: git clone https://github.com/SteamDatabase/ValveKeyValue.git ../ValveKeyValue
+        run: git clone https://github.com/CloneTrooper1019/ValveKeyValue.git ../ValveKeyValue
       - name: Build and analyze
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
         shell: powershell
         run: |
-          cd ../ValveKeyValue/ValveKeyValue
           dir
           dotnet build
           dotnet publish
