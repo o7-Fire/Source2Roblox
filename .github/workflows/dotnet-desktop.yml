@@ -67,9 +67,10 @@ jobs:
         Configuration: ${{ matrix.configuration }}
         
     - name: meh
+      shell: powershell
       run: |
        dir
-       dir bin
+       dir bin/Release
        
     # Upload the MSIX package: https://github.com/marketplace/actions/upload-artifact
     - name: Upload build artifacts
