@@ -42,9 +42,9 @@ jobs:
     - name: Nugget
       shell: powershell
       run: |
-      nuget restore Source2Roblox.sln
-      nuget restore ../ValveKeyValue/ValveKeyValue/ValveKeyValue.sln
-      nuget restore ../Roblox-File-Format/RobloxFileFormat.sln
+        nuget restore Source2Roblox.sln
+        nuget restore ../ValveKeyValue/ValveKeyValue/ValveKeyValue.sln
+        nuget restore ../Roblox-File-Format/RobloxFileFormat.sln
       
     # Add  MSBuild to the PATH: https://github.com/microsoft/setup-msbuild
     - name: Setup MSBuild.exe
