@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Diagnostics;
 using System.IO;
 
@@ -10,8 +11,12 @@ using Source2Roblox.Textures;
 using Source2Roblox.World;
 
 using RobloxFiles;
+using RobloxFiles.Enums;
 using RobloxFiles.DataTypes;
 using System.Linq;
+
+using ValveKeyValue;
+using Source2Roblox.Util;
 
 namespace Source2Roblox
 {
@@ -28,19 +33,34 @@ namespace Source2Roblox
             return null;
         }
 
+        public static string CleanPath(string path)
+        {
+            string cleaned = path
+                .ToLowerInvariant()
+                .Replace('\\', '/');
+
+            return cleaned;
+        }
+
         public static void BakeRbxm(ModelFile model)
         {
-            var modelInfo = new FileInfo(model.Name);
+            var modelPath = model.Location;
+            var modelInfo = new FileInfo(modelPath);
+
+            var game = model.Game ?? GameMount;
+            var gameName = game.GameName;
             
             string modelName = modelInfo.Name
                 .Replace(".mdl", "")
                 .ToLowerInvariant();
 
             string localAppData = Environment.GetEnvironmentVariable("localappdata");
-            string exportDir = Path.Combine(localAppData, "Roblox Studio", "content", "models", modelName);
+            string rootWorkDir = Path.Combine(localAppData, "Roblox Studio", "content", "source", gameName);
 
-            Directory.CreateDirectory(exportDir);
-
+            string rbxAssetDir = $"rbxasset://source/{gameName}";
+            string modelDir = modelPath.Replace(modelInfo.Name, "");
+            string meshDir = Path.Combine(modelDir, modelName);
+            
             var meshBuffers = new List<MeshBuffer>();
             var exportBlob = new BinaryRobloxFile();
 
@@ -59,6 +79,9 @@ namespace Source2Roblox
             var allVerts = meshBuffers.SelectMany(buff => buff.Vertices);
             Region3 baseAABB = MeshBuffer.ComputeAABB(allVerts);
             Vector3 baseCenter = baseAABB.CFrame.Position;
+
+            var handledFiles = new HashSet<string>();
+            string lastBodyPart = "";
 
             foreach (var meshBuffer in meshBuffers)
             {
@@ -101,27 +124,130 @@ namespace Source2Roblox
                     mesh.Faces.Add(face);
                 }
 
-                var info = new FileInfo(meshBuffer.MaterialPath);
-                var name = info.Name.Replace(".vmt", "");
+                string matPath = meshBuffer.MaterialPath;
+                var info = new FileInfo(matPath);
 
+                string matName = info.Name.Replace(".vmt", "");
+                string name = meshBuffer.BodyPart;
+
+                if (name == lastBodyPart)
+                    name = matName;
+                else
+                    lastBodyPart = name;
+                
                 if (!name.StartsWith(modelName))
                     name = $"{modelName}_{name}";
 
+                ValveMaterial vmt = null;
+
+                if (GameMount.HasFile(matPath, game))
+                {
+                    vmt = new ValveMaterial(matPath, game);
+                    vmt.SaveVTF(vmt.DiffusePath, rootWorkDir);
+                    vmt.SaveVTF(vmt.BumpPath, rootWorkDir, true);
+                    vmt.SaveVTF(vmt.IrisPath, rootWorkDir, false);
+                }
+
+                string meshWorkDir = Path.Combine(rootWorkDir, meshDir);
+                Directory.CreateDirectory(meshWorkDir);
+
                 var meshPart = new MeshPart()
                 {
-                    MeshId = $"rbxasset://models/{modelName}/{name}.mesh",
-                    BrickColor = BrickColor.Random(),
+                    MeshId = $"{rbxAssetDir}/{meshDir}/{name}.mesh",
                     InitialSize = aabb.Size,
                     CFrame = aabb.CFrame,
                     DoubleSided = true,
                     Size = aabb.Size,
+                    Anchored = true,
                     Name = name,
                 };
 
-                string meshPath = Path.Combine(exportDir, $"{name}.mesh");
+                string diffusePath = vmt?.DiffusePath;
+
+                if (string.IsNullOrEmpty(diffusePath))
+                {
+                    meshPart.Color3uint8 = new Color3(1, 1, 1);
+                    meshPart.Material = Material.SmoothPlastic;
+                }
+                else
+                {
+                    string diffuseRoblox = diffusePath.Replace(".vtf", ".png");
+                    meshPart.TextureID = $"{rbxAssetDir}/{diffuseRoblox}";
+
+                    bool noAlpha = vmt.NoAlpha;
+                    string bumpPath = vmt.BumpPath;
+                    string irisPath = vmt.IrisPath;
+
+                    if (!string.IsNullOrEmpty(bumpPath) || !noAlpha)
+                    {
+                        var surface = new SurfaceAppearance()
+                        {
+                            AlphaMode = noAlpha ? AlphaMode.Overlay : AlphaMode.Transparency,
+                            ColorMap = meshPart.TextureID,
+                        };
+
+                        if (!string.IsNullOrEmpty(bumpPath))
+                        {
+                            string bumpRoblox = bumpPath.Replace(".vtf", ".png");
+                            surface.NormalMap = $"{rbxAssetDir}/{bumpRoblox}";
+                        }
+
+                        if (!string.IsNullOrEmpty(irisPath))
+                        {
+                            string irisRoblox = irisPath.Replace(".vtf", ".png");
+
+                            var eye = new BillboardGui
+                            {
+                                ExtentsOffsetWorldSpace = new Vector3(0, 0, -1.5f),
+                                Size = new UDim2(.06f, 0, .06f, 0),
+                                LightInfluence = 1.1f,
+                                Adornee = meshPart,
+                                Parent = meshPart,
+                                Name = "Eye"
+                            };
+
+                            var eyeball = new ImageLabel
+                            {
+                                AnchorPoint = new Vector2(.5f, .5f),
+                                Position = new UDim2(.5f, 0, .5f, 0),
+                                Size = new UDim2(2f, 0, 2f, 0),
+                                Image = meshPart.TextureID,
+                                Name = "Eyeball",
+                                Parent = eye,
+                            };
+
+                            var corner = new UICorner
+                            {
+                                CornerRadius = new UDim(1),
+                                Parent = eyeball
+                            };
+
+                            var iris = new ImageLabel
+                            {
+                                Image = $"{rbxAssetDir}/{irisRoblox}",
+                                Position = new UDim2(.5f, 0, .5f, 0),
+                                AnchorPoint = new Vector2(.5f, .5f),
+                                Size = new UDim2(1.1f, 0, 1.1f, 0),
+                                BackgroundTransparency = 1,
+                                Name = "Iris",
+                                Parent = eye,
+                                ZIndex = 2,
+                            };
+
+                            meshPart.Transparency = 1;
+                        }
+                        
+                        surface.Parent = meshPart;
+                    }
+                }
+
+                string meshPath = Path.Combine(meshWorkDir, $"{name}.mesh");
 
                 using (var stream = File.OpenWrite(meshPath))
+                {
                     mesh.Save(stream);
+                    Console.WriteLine($"\tWrote {meshPath}");
+                }
 
                 meshPart.Parent = exportModel;
             }
@@ -142,26 +268,12 @@ namespace Source2Roblox
                 }
             }
 
-            foreach (var otherPart in parts)
-            {
-                if (otherPart == largestPart)
-                    continue;
-
-                var weld = new WeldConstraint()
-                {
-                    Name = otherPart.Name,
-                    Part0Internal = otherPart,
-                    Part1Internal = largestPart,
-                    CFrame0 = otherPart.CFrame.ToObjectSpace(largestPart.CFrame)
-                };
-
-                weld.Parent = otherPart;
-            }
-
-            string exportPath = Path.Combine(exportDir, $"{modelName}.rbxm");
+            string exportPath = Path.Combine(rootWorkDir, modelDir, $"{modelName}.rbxm");
             exportModel.WorldPivotData = new CFrame();
             exportModel.PrimaryPart = largestPart;
+
             exportBlob.Save(exportPath);
+            Console.WriteLine($"\tWrote {exportPath}");
         }
 
         static void Main(string[] args)
@@ -265,8 +377,19 @@ namespace Source2Roblox
                         path = Console.ReadLine();
                     }
 
-                    var mdl = new ModelFile(path);
-                    BakeRbxm(mdl);
+                    try
+                    {
+                        var mdl = new ModelFile(path);
+                        BakeRbxm(mdl);
+
+                        ObjMesher.BakeMDL(mdl, exportDir);
+                    }
+                    catch (Exception e)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine($"\n{e}\n\n{e.StackTrace}\n");
+                        Console.ForegroundColor = ConsoleColor.Gray;
+                    }
                 }
             }
 

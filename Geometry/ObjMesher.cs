@@ -12,14 +12,14 @@ using Source2Roblox.World.Types;
 
 using RobloxFiles.DataTypes;
 using ValveKeyValue;
+using Source2Roblox.Util;
 
 namespace Source2Roblox.Geometry
 {
     public static class ObjMesher
     {
         private const TextureFlags IGNORE = TextureFlags.Sky | TextureFlags.Trans | TextureFlags.Hint | TextureFlags.Skip | TextureFlags.Trigger;
-        private static readonly KVSerializer VmtHelper = KVSerializer.Create(KVSerializationFormat.KeyValues1Text);
-
+        
         private static string GetFileName(string path)
         {
             var info = new FileInfo(path);
@@ -28,17 +28,19 @@ namespace Source2Roblox.Geometry
 
         public static void BakeMDL(ModelFile model, string exportDir, int skin = 0, int lod = 0, int subModel = 0)
         {
-            if (!Directory.Exists(exportDir))
-                Directory.CreateDirectory(exportDir);
-
             var game = model.Game;
             var info = new FileInfo(model.Name);
 
             string name = info.Name.Replace(".mdl", "");
+            exportDir = Path.Combine(exportDir, "SourceModels", name);
+
+            if (!Directory.Exists(exportDir))
+                Directory.CreateDirectory(exportDir);
 
             var objWriter = new StringBuilder();
             var mtlWriter = new StringBuilder();
             var meshBuffers = new List<MeshBuffer>();
+            var handledFiles = new HashSet<string>();
             
             for (int bodyPart = 0; bodyPart < model.BodyPartCount; bodyPart++)
             {
@@ -83,106 +85,38 @@ namespace Source2Roblox.Geometry
 
                 var matInfo = new FileInfo(matPath);
                 string matName = matInfo.Name.Replace(".vmt", "");
-
-                string diffusePath = "",
-                       bumpPath = "";
-
-                bool noAlpha = true;
-
+                ValveMaterial vmt = null;
+                
                 if (GameMount.HasFile(matPath, game))
                 {
-                    using (var vmtStream = GameMount.OpenRead(matPath, game))
-                    {
-                        var vmt = VmtHelper.Deserialize(vmtStream);
-                       
-                        foreach (var entry in vmt)
-                        {
-                            string key = entry.Name.ToLowerInvariant();
-                            var value = entry.Value.ToString();
-
-                            if (key == "$basetexture")
-                            {
-                                string path = $"materials/{value}.vtf";
-
-                                if (!GameMount.HasFile(path, game))
-                                {
-                                    Console.WriteLine($"\tInvalid $basetexture: {path}");
-                                    continue;
-                                }
-
-                                diffusePath = path;
-                            }
-                            else if (key == "$bumpmap")
-                            {
-                                string path = $"materials/{value}.vtf";
-
-                                if (!GameMount.HasFile(path, game))
-                                {
-                                    Console.WriteLine($"\tInvalid $bumpmap: {path}");
-                                    continue;
-                                }
-
-                                bumpPath = path;
-                            }
-                            else if (key == "$translucent")
-                            {
-                                bool alpha = (value == "1");
-                                noAlpha = !alpha;
-                            }
-                        }
-
-                        if (!string.IsNullOrEmpty(diffusePath))
-                        {
-                            string diffuseName = GetFileName(diffusePath);
-                            string diffuseFile = Path.Combine(exportDir, diffuseName + ".png");
-
-                            Console.WriteLine($"\tReading {diffusePath}");
-
-                            using (var vtfStream = GameMount.OpenRead(diffusePath, game))
-                            using (var vtfReader = new BinaryReader(vtfStream))
-                            {
-                                var vtf = new VTFFile(vtfReader, noAlpha);
-                                vtf.HighResImage.Save(diffuseFile);
-
-                                Console.WriteLine($"\tWrote {diffuseFile}");
-                            }
-                        }
-
-                        if (!string.IsNullOrEmpty(bumpPath))
-                        {
-                            string bumpName = GetFileName(bumpPath);
-                            string bumpFile = Path.Combine(exportDir, bumpName + ".png");
-
-                            Console.WriteLine($"\tReading {bumpPath}");
-
-                            using (var vtfStream = GameMount.OpenRead(bumpPath, game))
-                            using (var vtfReader = new BinaryReader(vtfStream))
-                            {
-                                var vtf = new VTFFile(vtfReader, noAlpha);
-                                vtf.HighResImage.Save(bumpFile);
-
-                                Console.WriteLine($"\tWrote {bumpFile}");
-                            }
-                        }
-                    }
+                    vmt = new ValveMaterial(matPath, game);
+                    vmt.SaveVTF(vmt.DiffusePath, exportDir);
+                    vmt.SaveVTF(vmt.BumpPath, exportDir, true);
                 }
-                
+
+                string diffusePath = vmt?.DiffusePath;
                 objWriter.AppendLine($"\tg {matName}");
 
                 if (!string.IsNullOrEmpty(diffusePath))
                 {
-                    string diffuseName = GetFileName(diffusePath);
+                    string diffuse = diffusePath.Replace(".vtf", ".png");
+                    diffuse = Program.CleanPath(diffuse);
+
                     objWriter.AppendLine($"\tusemtl {matName}\n");
                     mtlWriter.AppendLine($"newmtl {matName}");
 
+                    string bumpPath = vmt.BumpPath;
+                    bool noAlpha = vmt.NoAlpha;
+
                     if (!string.IsNullOrEmpty(bumpPath))
                     {
-                        string bumpName = GetFileName(bumpPath);
-                        mtlWriter.AppendLine($"bump {bumpName}.png");
+                        string bump = bumpPath.Replace(".vtf", ".png");
+                        bump = Program.CleanPath(bump);
+                        mtlWriter.AppendLine($"bump {bump}");
                     }
-                        
-                    mtlWriter.AppendLine($"map_Kd {diffuseName}.png");
-                    mtlWriter.AppendLine(noAlpha ? "" : $"map_d  {diffuseName}.png\n");
+                    
+                    mtlWriter.AppendLine($"map_Kd {diffuse}");
+                    mtlWriter.AppendLine(noAlpha ? "" : $"map_d {diffuse}\n");
                 }
                 
                 for (int i = 0; i < mesh.NumIndices; i += 3)
