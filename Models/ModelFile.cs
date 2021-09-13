@@ -1,11 +1,10 @@
-﻿using RobloxFiles.DataTypes;
-using Source2Roblox.FileSystem;
-using Source2Roblox.Geometry;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+
+using Source2Roblox.FileSystem;
 
 namespace Source2Roblox.Models
 {
@@ -23,36 +22,6 @@ namespace Source2Roblox.Models
 
         public int NumIndices => Indices.Count;
         public List<ushort> Indices;
-
-        public static Region3 ComputeAABB(IEnumerable<StudioVertex> vertices)
-        {
-            float min_X = float.MaxValue,
-                  min_Y = float.MaxValue,
-                  min_Z = float.MaxValue,
-
-                  max_X = float.MinValue,
-                  max_Y = float.MinValue,
-                  max_Z = float.MinValue;
-
-            foreach (StudioVertex studioVertex in vertices)
-            {
-                RobloxVertex rbxVertex = studioVertex;
-                Vector3 pos = rbxVertex.Position;
-
-                min_X = Math.Min(min_X, pos.X);
-                min_Y = Math.Min(min_Y, pos.Y);
-                min_Z = Math.Min(min_Z, pos.Z);
-
-                max_X = Math.Max(max_X, pos.X);
-                max_Y = Math.Max(max_Y, pos.Y);
-                max_Z = Math.Max(max_Z, pos.Z);
-            }
-
-            var min = new Vector3(min_X, min_Y, min_Z);
-            var max = new Vector3(max_X, max_Y, max_Z);
-
-            return new Region3(min, max);
-        }
     }
 
     public class ModelFile
@@ -61,6 +30,7 @@ namespace Source2Roblox.Models
         public readonly string Location;
         public readonly ModelHeader Header;
         public readonly VertexData VertexData;
+        public readonly PhysicsData PhysicsData;
         public readonly TriangleData TriangleData;
         public readonly IReadOnlyList<string> Materials;
 
@@ -82,6 +52,7 @@ namespace Source2Roblox.Models
                 path += ".mdl";
 
             string vvdPath = path.Replace(".mdl", ".vvd");
+            string phyPath = path.Replace(".mdl", ".phy");
             string vtxPath = path.Replace(".mdl", ".dx90.vtx");
 
             var mdlStream = GameMount.OpenRead(path, game);
@@ -93,6 +64,16 @@ namespace Source2Roblox.Models
             var mdl = new ModelHeader(mdlReader);
             var vtx = new TriangleData(mdl, vtxReader);
             var vvd = new VertexData(mdl, vvdPath, game);
+
+            if (GameMount.HasFile(phyPath, game))
+            {
+                using (var phyStream = GameMount.OpenRead(phyPath, game))
+                using (var phyReader = new BinaryReader(phyStream))
+                {
+                    var phy = new PhysicsData(phyReader);
+                    PhysicsData = phy;
+                }
+            }
 
             int numTextures = mdl.TextureCount;
             var textureIndex = mdl.TextureIndex;
@@ -490,7 +471,7 @@ namespace Source2Roblox.Models
             vtxReader.Dispose();
         }
 
-        public List<MeshBuffer> GetMeshes(int bodyPartId = 0, int modelId = 0, int lodId = 0, int skinId = 0)
+        public List<MeshBuffer> GetMeshes(int bodyPartId = 0, int skinId = 0, int modelId = 0, int lodId = 0)
         {
             StudioBodyPart bodyPart = TriangleData.BodyParts[bodyPartId];
             StudioModel model = bodyPart.Models[modelId];
@@ -505,7 +486,12 @@ namespace Source2Roblox.Models
             foreach (var mesh in meshes)
             {
                 var meshData = new MeshVertexData(mesh, modelData);
-                var matPath = mesh.Materials[skinId];
+                string matPath;
+
+                if (skinId >= mesh.Materials.Length)
+                    matPath = mesh.Materials.First();
+                else
+                    matPath = mesh.Materials[skinId];
 
                 var meshBuffer = new MeshBuffer()
                 {

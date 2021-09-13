@@ -3,9 +3,11 @@ using System.IO;
 
 namespace Source2Roblox.World.Types
 {
-    public struct Face
+    public class Face
     {
+        public int FaceIndex;
         public ushort PlaneNum;
+
         public byte Side;
         public bool OnNode;
 
@@ -27,6 +29,24 @@ namespace Source2Roblox.World.Types
         public ushort FirstPrimitiveId;
         public uint SmoothingGroups;
 
+        public int FirstUV;
+        public int FirstVert;
+        public int FirstNorm;
+
+        public string Material;
+        public int BrushIndex;
+        public int LeafIndex;
+
+        public bool Skip;
+        public Leaf Leaf;
+
+        public Entity Entity;
+        public Vector3 Center = new Vector3();
+
+        public override string ToString()
+        {
+            return $"{Material ?? ""}";
+        }
         public Face(BinaryReader reader)
         {
             PlaneNum = reader.ReadUInt16();
@@ -44,8 +64,8 @@ namespace Source2Roblox.World.Types
             LightOffset = reader.ReadInt32();
             Area = reader.ReadSingle();
 
-            LightmapTextureMinsInLuxels = reader.ReadIntVector2();
-            LightmapTextureSizeInLuxels = reader.ReadIntVector2();
+            LightmapTextureMinsInLuxels = reader.ReadVector2Int32();
+            LightmapTextureSizeInLuxels = reader.ReadVector2Int32();
             
             OriginalFace = reader.ReadInt32();
             NumPrimitives = reader.ReadUInt16();

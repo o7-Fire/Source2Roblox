@@ -1,71 +1,64 @@
-﻿using System.Collections.Generic;
-using System.IO;
-using System.Linq;
+﻿using System.IO;
+using System.IO.Compression;
 
 namespace Source2Roblox.FileSystem
 {
-    public struct VPKEntryChunk
+    public class VPKEntry
     {
-        public readonly ushort PackFileIndex;
-        public readonly uint ChunkOffset;
-        public readonly uint ChunkSize;
+        public readonly uint CRC = 0;
+        public readonly ushort Index = 0;
+        public readonly uint Offset = 0;
+        public readonly uint Size = 0;
 
-        public VPKEntryChunk(ushort index, uint offset, uint size)
+        public readonly int PreloadBytes;
+        public readonly ZipArchiveEntry ZipEntry;
+
+        private byte[] PreloadContent;
+
+        public VPKEntry(BinaryReader reader)
         {
-            PackFileIndex = index;
-            ChunkOffset = offset;
-            ChunkSize = size;
+            CRC = reader.ReadUInt32();
+
+            PreloadBytes = reader.ReadUInt16();
+            Index = reader.ReadUInt16();
+
+            if (Index != 0xFFFF)
+            {
+                Offset = reader.ReadUInt32();
+                Size = reader.ReadUInt32();
+            }
+
+            PreloadContent = reader.ReadBytes(PreloadBytes);
+            reader.Skip(2);
         }
-    }
 
-    public struct VPKEntry
-    {
-        public readonly List<VPKEntryChunk> Chunks;
-
-        private VPKEntryChunk? Chunk0
+        public byte[] EmbeddedContent
         {
             get
             {
-                if (Chunks.Any())
-                    return Chunks.First();
+                if (Index != 0x7FFF)
+                    return null;
 
-                return null;
+                if (PreloadContent != null)
+                    return PreloadContent;
+
+                if (ZipEntry == null)
+                    return null;
+
+                using (var stream = ZipEntry.Open())
+                using (var reader = new BinaryReader(stream))
+                {
+                    PreloadContent = reader.ReadBytes(PreloadBytes);
+                    return PreloadContent;
+                }
             }
         }
 
-        public bool HasData => Chunks.Any();
-        public readonly string Path;
-        public readonly uint CRC;
-
-        public ushort Index => Chunk0?.PackFileIndex ?? 0;
-        public uint Offset => Chunk0?.ChunkOffset ?? 0;
-        public uint Size => Chunk0?.ChunkSize ?? 0;
-
-        public override string ToString() => $"{Path}";
-        
-        public VPKEntry(string path, BinaryReader reader)
+        public VPKEntry(ZipArchiveEntry entry)
         {
-            Path = path;
-            CRC = reader.ReadUInt32();
-            
-            var preloadBytes = reader.ReadUInt16();
-            Chunks = new List<VPKEntryChunk>();
-            
-            while (true)
-            {
-                ushort index = reader.ReadUInt16();
-
-                if (index == 0xFFFF)
-                    break;
-
-                uint offset = reader.ReadUInt32();
-                uint size = reader.ReadUInt32();
-
-                var chunk = new VPKEntryChunk(index, offset, size);
-                Chunks.Add(chunk);
-            }
-
-            reader.Skip(preloadBytes);
+            Index = 0x7FFF;
+            ZipEntry = entry;
+            PreloadBytes = (int)entry.Length;
         }
     }
 }

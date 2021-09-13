@@ -2,13 +2,14 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 
 namespace Source2Roblox.FileSystem
 {
     public class VPKDirectory : IEnumerable<VPKEntry>
     {
-        public IReadOnlyDictionary<string, VPKEntry> Entries => EntriesImpl;
-        private readonly Dictionary<string, VPKEntry> EntriesImpl = new Dictionary<string, VPKEntry>();
+        private readonly Dictionary<string, VPKEntry> Entries = new Dictionary<string, VPKEntry>();
+        public readonly ZipArchive ZipArchive;
 
         public readonly uint Version;
         public readonly uint DirectorySize;
@@ -27,12 +28,30 @@ namespace Source2Roblox.FileSystem
                 if (string.IsNullOrEmpty(fileName))
                     break;
 
-                string dirPrefix = dir.Trim() == "" ? "" : $"{dir}/";
+                string path = $"{fileName}.{ext}";
 
-                string path = Program.CleanPath($"{dirPrefix}{fileName}.{ext}");
-                var entry = new VPKEntry(path, reader);
-                EntriesImpl.Add(path, entry);
+                if (dir.Length > 0)
+                    path = $"{dir}/{path}";
+
+                var entry = new VPKEntry(reader);
+                Entries.Add(path, entry);
             }
+        }
+
+        public VPKEntry FindEntry(string path)
+        {
+            if (!Entries.TryGetValue(path, out VPKEntry entry))
+            {
+                ZipArchiveEntry zipEntry = ZipArchive?.GetEntry(path);
+
+                if (zipEntry != null)
+                {
+                    entry = new VPKEntry(zipEntry);
+                    Entries[path] = entry;
+                }
+            }
+
+            return entry;
         }
 
         private void ReadDirectories(BinaryReader reader, string ext)
@@ -43,6 +62,8 @@ namespace Source2Roblox.FileSystem
 
                 if (dir.Length == 0)
                     break;
+                else
+                    dir = dir.Trim();
 
                 ReadFiles(reader, ext, dir);
             }
@@ -77,6 +98,11 @@ namespace Source2Roblox.FileSystem
 
                 ReadDirectories(reader, ext);
             }
+        }
+
+        public VPKDirectory(ZipArchive archive)
+        {
+            ZipArchive = archive;
         }
 
         public IEnumerator<VPKEntry> GetEnumerator()

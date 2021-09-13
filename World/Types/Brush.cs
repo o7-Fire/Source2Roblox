@@ -1,6 +1,8 @@
 ﻿using System;
 using System.IO;
 
+using RobloxFiles.DataTypes;
+
 namespace Source2Roblox.World.Types
 {
     [Flags]
@@ -40,7 +42,7 @@ namespace Source2Roblox.World.Types
         Hitbox       = 0x40000000
     }
 
-    public struct Brush
+    public class Brush
     {
         public readonly BrushFlags Contents;
         public readonly int FirstSide;
@@ -54,7 +56,7 @@ namespace Source2Roblox.World.Types
         }
     }
 
-    public struct BrushSide
+    public class BrushSide
     {
         public readonly ushort PlaneNum;
         public readonly short TexInfo;
@@ -67,6 +69,28 @@ namespace Source2Roblox.World.Types
             TexInfo = reader.ReadInt16();
             DispInfo = reader.ReadInt16();
             Bevel = reader.ReadInt16();
+        }
+    }
+
+    public class BrushModel
+    {
+        public Vector3 BoundsMin;
+        public Vector3 BoundsMax;
+        public Vector3 Origin;
+
+        public int HeadNode;
+        public int FirstFace;
+        public int NumFaces;
+
+        public BrushModel(BinaryReader reader)
+        {
+            BoundsMin = reader.ReadVector3();
+            BoundsMax = reader.ReadVector3();
+            Origin = reader.ReadVector3();
+
+            HeadNode = reader.ReadInt32();
+            FirstFace = reader.ReadInt32();
+            NumFaces = reader.ReadInt32();
         }
     }
 }

@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-
-namespace Source2Roblox.World
+﻿namespace Source2Roblox.World
 {
     public enum LumpType
     {
@@ -11,7 +7,7 @@ namespace Source2Roblox.World
         TexData,
         Vertices,
         Visibility,
-        TreeNodes,
+        Nodes,
         TexInfo,
         Faces,
         Lighting,
@@ -72,15 +68,9 @@ namespace Source2Roblox.World
         DispMultiblend
     }
 
-    public interface ILump
-    {
-        void Read(Stream stream, BinaryReader reader);
-    }
-
     public class Lump
     {
         public LumpType Type;
-        public ILump Value;
 
         public int Offset;
         public int Length;
