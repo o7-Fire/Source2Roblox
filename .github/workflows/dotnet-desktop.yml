@@ -69,7 +69,6 @@ jobs:
     - name: meh
       shell: powershell
       run: |
-       dotnet publish -c Release -r win10-x64
        dir
        dir bin/Release
        
